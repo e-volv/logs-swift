@@ -9,25 +9,35 @@ import XCTest
  * queue directory per test, and helpers to read what the client wrote.
  */
 enum Stub {
+    typealias Response = (status: Int, headers: [String: String], body: Data?)
+
     static var lock = NSLock()
-    static var responses: [(status: Int, headers: [String: String])] = []
+    static var responses: [Response] = []
     static var requests: [(url: URL, headers: [String: String], body: Data)] = []
 
     static func reset(_ response: (status: Int, headers: [String: String]) = (202, [:])) {
         lock.lock()
-        responses = [response]
+        responses = [(response.status, response.headers, nil)]
+        requests = []
+        lock.unlock()
+    }
+
+    /// A canned JSON response (flags tests need bodies, log tests do not).
+    static func respond(_ status: Int, headers: [String: String] = [:], body: String) {
+        lock.lock()
+        responses = [(status, headers, Data(body.utf8))]
         requests = []
         lock.unlock()
     }
 
     /// Next canned response; repeats the last one when exhausted.
-    static func nextResponse() -> (status: Int, headers: [String: String]) {
+    static func nextResponse() -> Response {
         lock.lock()
         defer { lock.unlock() }
         if responses.count > 1 {
             return responses.removeFirst()
         }
-        return responses.first ?? (202, [:])
+        return responses.first ?? (202, [:], nil)
     }
 
     static func record(url: URL, headers: [String: String], body: Data) {
@@ -82,7 +92,7 @@ final class StubURLProtocol: URLProtocol {
             headerFields: r.headers
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocol(self, didLoad: r.body ?? Data())
         client?.urlProtocolDidFinishLoading(self)
     }
 

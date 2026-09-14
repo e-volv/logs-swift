@@ -63,6 +63,34 @@ final class Transport {
         return Result(status: status, retryAfter: retryAfter)
     }
 
+    /// POSTs `body` as uncompressed JSON to an explicit URL (the flags
+    /// exposures endpoint), returning the status and Retry-After header.
+    /// Same identity headers as the logs path; a transport error is
+    /// surfaced as status 0. Built on `session.data(for:)`, so no exposure
+    /// path parks a thread — the main thread on `applicationWillTerminate`,
+    /// the Flutter platform thread, or a cooperative-pool thread.
+    func postJSON(_ body: Data, to url: URL) async -> Result {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = Constants.deliveryTimeoutSeconds
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "authorization")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.setValue(appID, forHTTPHeaderField: "x-evolve-app-id")
+        request.setValue(installID, forHTTPHeaderField: "x-evolve-install-id")
+        request.httpBody = body
+
+        do {
+            let (_, response) = try await session.data(for: request)
+            let http = response as? HTTPURLResponse
+            return Result(
+                status: http?.statusCode ?? 0,
+                retryAfter: http?.value(forHTTPHeaderField: "Retry-After")
+            )
+        } catch {
+            return Result(status: 0, retryAfter: nil)
+        }
+    }
+
     static func gzip(_ data: Data) -> Data {
         // Through the system zlib, with the gzip container the ingest's
         // Content-Encoding expects (zlib's own format is not gzip).

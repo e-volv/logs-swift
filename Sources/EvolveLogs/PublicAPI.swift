@@ -21,6 +21,13 @@ public enum EvolveLogs {
     public static func client() -> LogsClient? {
         shared
     }
+
+    /// The Launch flags client of the installed client. Before
+    /// `initialize` (or with flags disabled in options) this is a disabled
+    /// instance: reads return defaults and no network or disk I/O happens.
+    public static var flags: Flags {
+        shared?.flags ?? Flags.disabled()
+    }
 }
 
 /// The logging surface — one enum of statics, matching the Node, Python and

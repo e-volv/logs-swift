@@ -46,7 +46,7 @@ else {
 let queueDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent("evolve-conformance-\(UUID().uuidString)")
 
-let options = EvolveLogsOptions(
+var options = EvolveLogsOptions(
     key: key,
     url: stubURL,
     service: service,
@@ -61,6 +61,11 @@ let options = EvolveLogsOptions(
     enableSessionEvents: false,
     enableSessionID: false
 )
+// The Observer fixture predates Launch: keep its wire free of flags
+// requests (the ingest stub would just 404 them).
+var flagsOptions = FlagsOptions()
+flagsOptions.enabled = false
+options.flags = flagsOptions
 let client = EvolveLogs.initialize(options)
 
 func severityNumber(_ name: String) -> Int {

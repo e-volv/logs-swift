@@ -49,6 +49,9 @@ public struct EvolveLogsOptions {
     /// session model); the conformance runner disables it because the
     /// pinned fixture predates session ids.
     public var enableSessionID: Bool
+    /// The Launch flags client (docs/LAUNCH-SDK.md, client kind): evaluated
+    /// values for one context, cached on device, refreshed on foreground.
+    public var flags: FlagsOptions
 
     public init(
         key: String,
@@ -67,7 +70,8 @@ public struct EvolveLogsOptions {
         session: URLSession? = nil,
         allowServerKeyForTesting: Bool = false,
         enableSessionEvents: Bool = true,
-        enableSessionID: Bool = true
+        enableSessionID: Bool = true,
+        flags: FlagsOptions = FlagsOptions()
     ) {
         self.key = key
         self.url = url
@@ -86,6 +90,7 @@ public struct EvolveLogsOptions {
         self.allowServerKeyForTesting = allowServerKeyForTesting
         self.enableSessionEvents = enableSessionEvents
         self.enableSessionID = enableSessionID
+        self.flags = flags
     }
 
     public static func defaultAppID() -> String {

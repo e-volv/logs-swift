@@ -3,6 +3,9 @@ import Foundation
 /// Shared batching and retry numbers — identical in every SDK
 /// (docs/OBSERVER-SDK.md §"The contract every SDK speaks").
 enum Constants {
+    /// The SDK version: the User-Agent (`e-volv-logs-swift/<v>`) and the
+    /// mirror tag (logs-swift-v<v>) both read this.
+    static let sdkVersion = "0.1.0"
     static let maxBatch = 200
     static let flushIntervalNanoseconds: Int = 2_000_000_000
     static let maxPayloadBytes = 512 * 1024

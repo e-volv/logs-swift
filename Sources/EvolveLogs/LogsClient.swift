@@ -22,13 +22,24 @@ public final class LogsClient {
     let release: String
     let sampleRate: Double
     let appID: String
-    let installID: String
+    /// The `x-evolve-install-id`, generated once per install and persisted.
+    /// Public: the React Native / Flutter bridges read it for their own
+    /// identity plumbing.
+    public let installID: String
     let redactMatches: (String) -> Bool
     let enabled: Bool
 
     // --- mobile transport -------------------------------------------------
     let queue: DiskQueue
     let transport: Transport?
+    private let session: URLSession
+    private let queueDirectory: URL
+
+    // --- Launch flags (client kind) -----------------------------------------
+    /// The flags client; a structurally disabled instance when the key was
+    /// refused or flags are off in options. Replaced by `replaceFlags` when
+    /// a cross-platform bridge configures flags after Observer configure.
+    public private(set) var flags: Flags
 
     // --- session model ----------------------------------------------------
     private(set) var sessionID = ""
@@ -49,6 +60,8 @@ public final class LogsClient {
     private let crashCatcher = CrashCatcher()
     #if os(iOS)
         private var lifecycle: LifecycleObserver?
+    #elseif os(macOS)
+        private var macLifecycle: MacLifecycleObserver?
     #endif
 
     /// Events dropped: evicted past the in-memory buffer cap (2× batch,
@@ -94,15 +107,33 @@ public final class LogsClient {
 
         // The disk queue survives process death; reads happen here, at
         // launch, before new events are appended.
-        let queueDir = options.queueDirectory ?? DiskQueueDirectory.default()
-        queue = (try? DiskQueue(directory: queueDir, byteCap: options.queueByteCap))
+        queueDirectory = options.queueDirectory ?? DiskQueueDirectory.default()
+        queue = (try? DiskQueue(directory: queueDirectory, byteCap: options.queueByteCap))
             ?? (try! DiskQueue(directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("evolve-logs-\(UUID().uuidString)")))
 
-        let session = options.session ?? URLSession(configuration: .ephemeral)
+        session = options.session ?? URLSession(configuration: .ephemeral)
         transport = enabled
             ? Transport(url: url, key: key, appID: appID, installID: installID, session: session)
             : nil
+
+        // Launch flags on the same key, app id, install id and session; its
+        // cache lives beside the disk queue. Built before any hook captures
+        // self (crash catcher, lifecycle) — it is a stored property. Flags
+        // require a public key: client values are refused for server keys,
+        // and the Observer fixture's allowServerKeyForTesting escape hatch
+        // must not leak into the flags client either.
+        flags = Flags(
+            key: key,
+            appID: appID,
+            installID: installID,
+            observerUrl: options.url,
+            options: options.flags,
+            session: session,
+            queueDirectory: queueDirectory,
+            transport: transport,
+            enabled: enabled && key.hasPrefix("evk_pub_")
+        )
 
         // Session model: one id per app foreground epoch, an app-start
         // marker, foreground/background transitions as events.
@@ -117,6 +148,8 @@ public final class LogsClient {
         }
         #if os(iOS)
             lifecycle = LifecycleObserver(client: self)
+        #elseif os(macOS)
+            macLifecycle = MacLifecycleObserver(client: self)
         #endif
 
         startFlushTimer()
@@ -158,6 +191,72 @@ public final class LogsClient {
     /// Enqueues an event at the given OTel severity number.
     public func log(severity: Int, message: String, attrs: [String: Any] = [:]) {
         enqueue(severity: severity, message: message, attrs: attrs)
+    }
+
+    /**
+     * Enqueue a finished event built by a cross-platform layer (React
+     * Native, Flutter). The JSON carries the wire event shape — `message`,
+     * `severity`, `attrs`, optional `traceId` / `spanId` / `parentSpanId` —
+     * and flows through the same redact/stamp/enqueue path as a native log
+     * call, so redaction, service stamping and the disk queue stay
+     * identical. The `ts` is regenerated here (the enqueue path owns
+     * timestamps). Malformed JSON is dropped and counted; never throws.
+     */
+    public func emit(json: String) {
+        guard enabled else { return }
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let message = obj["message"] as? String
+        else {
+            lock.lock(); dropped += 1; lock.unlock()
+            return
+        }
+        let severity = (obj["severity"] as? NSNumber)?.intValue ?? Constants.otelInfo
+        let attrs = obj["attrs"] as? [String: Any] ?? [:]
+        var context: TraceContext?
+        if let traceID = obj["traceId"] as? String, !traceID.isEmpty,
+           let spanID = obj["spanId"] as? String, !spanID.isEmpty {
+            context = TraceContext(
+                traceID: traceID,
+                spanID: spanID,
+                parentSpanID: obj["parentSpanId"] as? String ?? ""
+            )
+        }
+        enqueue(severity: severity, message: message, attrs: attrs, explicitContext: context)
+    }
+
+    /**
+     * The traceparent a cross-platform layer is currently inside (React
+     * Native passes the header its JS span holds), for URLSession
+     * injection. Nil clears it. Consulted only when no task-local trace
+     * context is active — an ambient Swift trace always wins.
+     */
+    public func setExternalTraceparent(_ header: String?) {
+        URLSessionIntegration.setExternalTraceparent(header)
+    }
+
+    /**
+     * Replaces the flags client — the React Native / Flutter bridges
+     * configure flags after the Observer `configure`, and this rebuilds the
+     * client with the bridged options. The previous client closes (its
+     * poller stops and its pending exposures flush).
+     */
+    @discardableResult
+    public func replaceFlags(_ options: FlagsOptions) -> Flags {
+        flags.close()
+        let replacement = Flags(
+            key: key,
+            appID: appID,
+            installID: installID,
+            observerUrl: url.absoluteString,
+            options: options,
+            session: session,
+            queueDirectory: queueDirectory,
+            transport: transport,
+            enabled: enabled && key.hasPrefix("evk_pub_")
+        )
+        flags = replacement
+        return replacement
     }
 
     /// Logs err as an error event: severity 17, message
@@ -446,11 +545,13 @@ public final class LogsClient {
     }
 
     /// Stops the flush timer, removes the crash handlers (chaining to the
-    /// previously installed ones) and flushes what is pending.
+    /// previously installed ones), stops the flags poller and flushes what
+    /// is pending on both clients.
     public func shutdown() {
         flushTimer?.cancel()
         flushTimer = nil
         crashCatcher.uninstall()
+        flags.close()
         flush()
     }
 }

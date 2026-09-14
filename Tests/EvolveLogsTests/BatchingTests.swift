@@ -46,7 +46,7 @@ final class BatchingTests: XCTestCase {
 
     func testRetryAfterIsHonoured() {
         // First request throttled with Retry-After: 0, second accepted.
-        Stub.responses = [(429, ["Retry-After": "0"]), (202, [:])]
+        Stub.responses = [(429, ["Retry-After": "0"], nil), (202, [:], nil)]
         Stub.lock.lock(); Stub.requests = []; Stub.lock.unlock()
         let client = makeClient()
         client.log(severity: 9, message: "throttled once")
