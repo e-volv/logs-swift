@@ -7,9 +7,12 @@ let package = Package(
         .macOS(.v13),
         .iOS(.v15),
     ],
+    // The only product is the library. The conformance runners below are
+    // executable targets, not products: `swift run --package-path
+    // packages/logs-swift conformance-runner` still builds and runs them in
+    // this (root) package, but a dependent package cannot see them.
     products: [
         .library(name: "EvolveLogs", targets: ["EvolveLogs"]),
-        .executable(name: "conformance-runner", targets: ["conformance-runner"]),
     ],
     targets: [
         .target(

@@ -1,8 +1,8 @@
 Pod::Spec.new do |s|
   s.name = 'EvolveLogs'
-  s.version = '0.1.0'
-  s.summary = 'e-volv Observer and Launch SDK for iOS and macOS.'
-  s.homepage = 'https://e-volv.io'
+  s.version = '0.1.1'
+  s.summary = 'e-volv SDK for iOS and macOS: feature flags (e-volv Launch) and logs (e-volv Observer).'
+  s.homepage = 'https://e-volv.io/docs/flags/sdk/swift'
   s.license = { type: 'MIT', file: 'LICENSE' }
   s.author = { 'e-volv' => 'support@e-volv.io' }
   s.source = { git: 'https://github.com/e-volv/logs-swift.git', tag: s.version.to_s }
