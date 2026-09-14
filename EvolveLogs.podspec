@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.homepage = 'https://e-volv.io'
   s.license = { type: 'MIT', file: 'LICENSE' }
   s.author = { 'e-volv' => 'support@e-volv.io' }
-  s.source = { git: 'https://github.com/Pactify-Pty-Ltd/e-volv-logs-swift.git', tag: s.version.to_s }
+  s.source = { git: 'https://github.com/e-volv/logs-swift.git', tag: s.version.to_s }
   s.ios.deployment_target = '15.0'
   s.osx.deployment_target = '13.0'
   s.swift_version = '5.9'
