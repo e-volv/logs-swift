@@ -11,6 +11,29 @@ dependencies (system zlib for gzip, os.log for diagnostics). Mobile clients
 differ from the server SDKs in transport only: a disk-backed queue that
 survives process death, lifecycle-driven flush, and long back-off.
 
+## Install
+
+Swift Package Manager. SwiftPM names the package after the repository, so the
+product comes from `logs-swift`:
+
+```swift
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/e-volv/logs-swift", from: "0.1.0"),
+],
+targets: [
+    .target(name: "MyApp", dependencies: [
+        .product(name: "EvolveLogs", package: "logs-swift"),
+    ]),
+]
+```
+
+CocoaPods:
+
+```ruby
+pod 'EvolveLogs', '~> 0.1'
+```
+
 ## Quick start
 
 ```swift
